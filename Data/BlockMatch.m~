@@ -1,0 +1,101 @@
+%pkg load image
+%Write a script that processes stereo image pair to generate disparity map
+%using basic blochalf_window_width matching
+
+% Read Images
+Image1 = double(rgb2gray(imread('Data/view1.png')));
+Image2 = double(rgb2gray(imread('Data/view5.png')));
+ImageGT1 = double(imread('Data/disp1.png'));
+ImageGT5 = double(imread('Data/disp5.png'));
+
+Disparity = zeros(size(Image1));
+
+% Parameters
+% Can be 5to1 or 1to5 If Image1 = view5, Image2 = view1, Set this as 5to1. Otherwise 1to5.
+direction = '1to5'; 
+disparityRange = 70;
+window = 9;
+
+% Variables in use
+mean_squared_error = 0;
+
+[image_height_original, image_width_original] = size(Image1);
+window_width = window;
+window_height = window;
+half_window_height = ceil(window_height/2);
+half_window_width = ceil(window_width/2);
+
+pad_y = half_window_height;
+pad_x = disparityRange + half_window_width;
+
+Image1 = padarray(Image1, [pad_y pad_x]);
+Image2 = padarray(Image2, [pad_y pad_x]);
+[image_height, image_width] = size(Image1);
+
+if direction == '5to1'
+  for base_pixel_y = 1 + pad_y : image_height - pad_y
+    for base_pixel_x = 1 + pad_x : image_width - pad_x
+      base_block = Image1(base_pixel_y - half_window_height + 1: base_pixel_y + half_window_height -1, base_pixel_x - half_window_width + 1: base_pixel_x + half_window_width - 1);
+      min_ssd_value = inf;
+          
+      for pixel_travel = 0:disparityRange
+        next_pixel_x = base_pixel_x + pixel_travel;   
+        next_search_block = Image2(base_pixel_y - half_window_height + 1: base_pixel_y + half_window_height - 1, next_pixel_x - half_window_width + 1: next_pixel_x + half_window_width - 1);  
+      
+        ssd_value = sum(sum((next_search_block - base_block).^2));      
+        if ssd_value < min_ssd_value
+          min_ssd_value = ssd_value;
+          min_disparity = pixel_travel;
+        end
+       end
+      
+      Disparity(base_pixel_y - pad_y, base_pixel_x - pad_x) = min_disparity;    
+    end
+  end
+else % '1to5' implementation
+  for base_pixel_y = 1 + pad_y : image_height - pad_y
+    for base_pixel_x = 1 + pad_x : image_width - pad_x
+      base_block = Image1(base_pixel_y - half_window_height + 1: base_pixel_y + half_window_height -1, base_pixel_x - half_window_width + 1: base_pixel_x + half_window_width - 1);
+      min_ssd_value = inf;
+          
+      for pixel_travel = 0:disparityRange
+        next_pixel_x = base_pixel_x - pixel_travel;
+        next_search_block = Image2(base_pixel_y - half_window_height + 1: base_pixel_y + half_window_height - 1, next_pixel_x - half_window_width + 1: next_pixel_x + half_window_width - 1);  
+      
+        ssd_value = sum(sum((next_search_block - base_block).^2));      
+        if ssd_value < min_ssd_value
+          min_ssd_value = ssd_value;
+          min_disparity = pixel_travel;
+        end
+       end
+      
+      Disparity(base_pixel_y - pad_y, base_pixel_x - pad_x) = min_disparity;    
+    end
+  end
+end
+
+if direction == '5to1'
+  for base_pixel_y = 1: image_height_original
+    for base_pixel_x = 1: image_width_original
+      mean_squared_error = mean_squared_error + (((ImageGT5(base_pixel_y, base_pixel_x) - Disparity(base_pixel_y, base_pixel_x)).^2)/(image_height_original*image_width_original));
+    end
+  end
+else 
+  for base_pixel_y = 1: image_height_original
+    for base_pixel_x = 1: image_width_original
+      mean_squared_error = mean_squared_error + (((ImageGT1(base_pixel_y, base_pixel_x) - Disparity(base_pixel_y, base_pixel_x)).^2)/(image_height_original*image_width_original));
+    end
+  end
+end
+
+window
+mean_squared_error
+
+imshow(Disparity,[]), axis image, colormap('jet'), colorbar;
+caxis([0 disparityRange]);
+newmap = colormap(gray(70));
+if direction == '5to1'
+  imwrite(Disparity, newmap, 'DisparityBasic5to1.png');
+else
+  imwrite(Disparity, newmap, 'DisparityBasic1to5.png');
+end

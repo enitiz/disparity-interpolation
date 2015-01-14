@@ -1,0 +1,62 @@
+% Load images
+disp5to1 = double(imread('DisparityBasic5to1.png'));
+disp1to5 = double(imread('DisparityBasic1to5.png'));
+ImageGT1 = double(imread('Data/disp1.png'));
+ImageGT5 = double(imread('Data/disp5.png'));
+consistency_matrix1 = zeros(size(disp1to5));
+consistency_matrix2 = zeros(size(disp1to5));
+
+disparity = 0;
+disparityRange = 70;
+
+% Variables in use
+mean_squared_error1 = 0;
+mean_squared_error2 = 0;
+
+[image_height_original, image_width_original] = size(disp1to5);
+window_width = window;
+window_height = window;
+half_window_height = ceil(window_height/2);
+half_window_width = ceil(window_width/2);
+
+pad_x = disparityRange;
+
+disp5to1 = padarray(disp5to1, [0 pad_x]);
+disp1to5 = padarray(disp1to5, [0 pad_x]);
+[image_height, image_width] = size(disp1to5);
+
+for pixel_y = 1: image_height
+  for pixel_x = 1 + pad_x :image_width - pad_x
+    disparity = disp5to1(pixel_y, pixel_x);
+    if disp1to5(pixel_y, pixel_x + disparity) == disparity
+      consistency_matrix1(pixel_y, pixel_x - pad_x) = ImageGT5(pixel_y, pixel_x - pad_x);
+    else
+      consistency_matrix1(pixel_y, pixel_x - pad_x) = NaN;
+    end
+  end
+end
+
+for pixel_y = 1: image_height
+  for pixel_x = 1 + pad_x :image_width - pad_x
+    disparity = disp1to5(pixel_y, pixel_x);
+    if disp5to1(pixel_y, pixel_x - disparity) == disparity
+      consistency_matrix2(pixel_y, pixel_x - pad_x) = ImageGT1(pixel_y, pixel_x - pad_x);
+    else
+      consistency_matrix2(pixel_y, pixel_x - pad_x) = NaN;
+    end
+  end
+end
+
+for base_pixel_y = 1: image_height_original
+  for base_pixel_x = 1: image_width_original
+    mean_squared_error1 = mean_squared_error1 + (((consistency_matrix1(base_pixel_y, base_pixel_x) - ImageGT5(base_pixel_y, base_pixel_x)).^2)/(image_height_original*image_width_original));
+    mean_squared_error2 = mean_squared_error2 + (((consistency_matrix2(base_pixel_y, base_pixel_x) - ImageGT1(base_pixel_y, base_pixel_x)).^2)/(image_height_original*image_width_original));
+  end
+end
+
+mean_squared_error1
+mean_squared_error2
+
+newmap = colormap(gray(70));
+imwrite(consistency_matrix1, newmap, 'ConsistencyCheckResult1.png');
+imwrite(consistency_matrix2, newmap, 'ConsistencyCheckResult2.png');
